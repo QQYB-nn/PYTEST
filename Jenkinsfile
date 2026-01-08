@@ -3,7 +3,7 @@ pipeline {
     stages { // 2. 定义阶段：整个流程分为以下几个大步骤
         stage('Checkout') { // 阶段1：拉取代码
             steps {
-                git branch: 'main', url: 'https://github.com/你的用户名/你的项目.git'
+                git branch: 'main', url: 'https://github.com/QQYB-nn/PYTEST.git'
             }
         }
         stage('Install Dependencies') { // 阶段2：安装依赖
