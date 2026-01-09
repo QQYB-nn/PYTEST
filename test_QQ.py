@@ -11,4 +11,4 @@ def test_subtraction():
 
 def test_failure():
     # 这个测试会失败，用于演示
-    assert 1 + 1 == 2
+    assert 1 + 1 == 3
