@@ -15,38 +15,17 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh '''
-                echo "安装依赖..."
-                # 如果有requirements.txt
-                if [ -f "requirements.txt" ]; then
-                    pip install -r requirements.txt
-                fi
-                # 安装必要的包
-                pip install pytest allure-pytest
-                '''
+                sh 'pip install -r requirements.txt'
             }
         }
 
         stage('Run Tests') {
             steps {
                 sh '''
-                echo "运行测试..."
                 # 创建结果目录
                 mkdir -p allure-results
-
-                # 方法1：直接运行pytest
-                # pytest . --alluredir=allure-results -v || true
-
-                # 方法2：运行你的Python脚本
-                python run_tests.py || true
-
-                # 检查是否生成了数据
-                echo "检查生成的数据..."
-                if [ -d "allure-results" ]; then
-                    echo "生成的文件:"
-                    ls -la allure-results/
-                    echo "文件数量: $(ls -1 allure-results | wc -l)"
-                fi
+                # 运行测试并生成Allure结果
+                pytest ./ --alluredir=allure-results || true
                 '''
             }
         }
@@ -54,24 +33,27 @@ pipeline {
         stage('Generate Report') {
             steps {
                 sh '''
-                echo "生成Allure报告..."
-                # 检查是否有数据
-                if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
-                    echo "错误：没有找到Allure结果文件"
-                    exit 1
+                # 安装Allure命令行工具（如果没安装）
+                if ! command -v allure &> /dev/null; then
+                    echo "安装Allure..."
+                    # 使用wget下载（或者你可以提前在Jenkins中配置）
+                    wget https://github.com/allure-framework/allure2/releases/download/2.20.1/allure-2.20.1.tgz
+                    tar -zxvf allure-2.20.1.tgz
+                    export PATH=$PATH:$PWD/allure-2.20.1/bin
                 fi
+
+                # 生成HTML报告
+                allure generate allure-results -o allure-report --clean
                 '''
             }
             post {
                 always {
-                    // 使用Jenkins的Allure插件生成报告
+                    // 发布Allure报告
                     allure([
                         includeProperties: false,
                         jdk: '',
                         results: [[path: 'allure-results']],
-                        reportBuildPolicy: 'ALWAYS',
-                        // 可选：指定报告版本
-                        // report: '2.20.1'
+                        reportBuildPolicy: 'ALWAYS'
                     ])
                 }
             }
@@ -80,46 +62,18 @@ pipeline {
         stage('Send Email') {
             steps {
                 script {
-                    // 构建结果
-                    def buildResult = currentBuild.result ?: 'SUCCESS'
-                    def allureUrl = "${env.BUILD_URL}allure/"
-
-                    // 读取测试结果统计
-                    def testCount = 0
-                    def passedCount = 0
-                    def failedCount = 0
-
-                    try {
-                        sh '''
-                        # 统计测试结果
-                        if [ -d "allure-results" ]; then
-                            echo "统计测试结果..."
-                            # 这里可以添加统计逻辑
-                        fi
-                        '''
-                    } catch (Exception e) {
-                        echo "统计测试结果失败: ${e}"
-                    }
-
+                    // 发送邮件（最简单的方式）
                     mail to: '625875899@qq.com',
-                         subject: "Jenkins构建结果: ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${buildResult}",
+                         subject: "Jenkins构建结果: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                          body: """
                          构建完成！
 
                          项目: ${env.JOB_NAME}
                          构建号: ${env.BUILD_NUMBER}
-                         构建状态: ${buildResult}
-                         构建地址: ${env.BUILD_URL}
+                         状态: ${currentBuild.result ?: 'SUCCESS'}
 
-                         📊 测试报告: ${allureUrl}
-                         📝 控制台输出: ${env.BUILD_URL}console
-
-                         测试结果:
-                         - 总测试数: ${testCount}
-                         - 通过: ${passedCount}
-                         - 失败: ${failedCount}
-
-                         详细报告请查看: ${allureUrl}
+                         查看报告: ${env.BUILD_URL}allure/
+                         控制台输出: ${env.BUILD_URL}console
                          """
                 }
             }
@@ -128,28 +82,8 @@ pipeline {
 
     post {
         always {
-            // 清理工作空间（可选）
-            // deleteDir()
-
-            // 或者只清理部分文件
-            sh '''
-            echo "清理临时文件..."
-            # 保留报告，只清理其他文件
-            rm -rf __pycache__/
-            rm -rf .pytest_cache/
-            '''
-
-            // 归档重要文件
-            archiveArtifacts artifacts: 'allure-report/**', fingerprint: true
-        }
-
-        success {
-            echo '构建成功！'
-        }
-
-        failure {
-            echo '构建失败！'
-            // 可以在这里添加失败通知
+            // 清理工作空间
+            deleteDir()
         }
     }
 }
